@@ -3,9 +3,9 @@ const ctx = view.getContext("2d", { willReadFrequently: true });
 const bgYellow = new Color(241, 229, 205, 1);
 // paper like yellow
 const blue = new Color(0, 134, 169, 1);
-const gray = new Color(64, 64, 64, 1);
+const gray = new Color(53, 54, 56, 1);
 const clear = new Color(255, 255, 255, 0);
-const darkgreen = new Color(37, 49, 47, 1);
+const darkgreen = new Color(115, 124, 114, 1);
 const params = {
   sep: 1.4,
   ali: 0.8,
@@ -44,6 +44,36 @@ function mkBg(width, height) {
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = bgYellow.toString();
   ctx.fillRect(0, 0, width, height);
+  // draw the leaves
+  for (let i = 0; i < 2000; i++) {
+    const x = Math.random() * width;
+    const y = Math.random() * height;
+    const corner = 0.25 - ((1 - y / height)** 2 + ( x / width) ** 2);
+    const diff = perlinNoise[Math.floor(y)][Math.floor(x)] - corner * 1.5;
+    if (diff < 0) {
+      i--;
+      continue;
+    }
+    const color = darkgreen.lerp(clear, diff);
+    const r = Math.random() * 5 + 10;
+    const num = Math.random() * 5 + 7;
+    for (let j = 0; j < num; j++) {
+      const angle = ((Math.PI * 2) / num) * j;
+      ctx.beginPath();
+      ctx.ellipse(
+        x + r * Math.cos(angle) * 0.7,
+        y + r * Math.sin(angle) * 0.7,
+        r,
+        r * 0.2,
+        angle + Math.random() * 0.5 - 0.25,
+        0,
+        Math.PI * 2
+      );
+      ctx.fillStyle = color.toString();
+      ctx.fill();
+    }
+  }
+
   const imageData = ctx.getImageData(0, 0, width, height);
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
@@ -81,7 +111,7 @@ window.addEventListener("resize", () =>
 const world = mkWorld({
   big: {
     head: [600, 600],
-    lens: [15, 40, 40, 40, 40, 40, 40, 40, 40],
+    lens: [15, 40, 40, 40, 40, 40, 40, 40, 80],
     r: [15, 20, 28, 32, 35, 30, 24, 18, 12, 6],
     c: blue,
     every: 1600,
@@ -89,20 +119,20 @@ const world = mkWorld({
   },
   fishes: Array.from({ length: 12 }, () => ({
     head: [600, 600],
-    lens: [6, 12, 12, 12, 12, 14, 16, 16, 16],
+    lens: [6, 12, 12, 12, 12, 14, 16, 16, 32],
     r: [6, 8, 11.2, 12.8, 14, 12, 9.6, 7.2, 4.8, 2.4],
-    c: gray.lerp(clear, Math.random() * 0.3),
+    c: gray.lerp(clear, 0.15),
     every: 200,
     push: 0.15,
   })),
 });
 
-function dropAt(dx, dy) {
+function dropAt(dx, dy, r) {
   // Make certain dx and dy are integers
   // Shifting left 0 is slightly faster than parseInt and math.* (or used to be)
   dx <<= 0;
   dy <<= 0;
-  const r = 5;
+  r <<= 0;
   // Our ripple effect area is actually a square, not a circle
   for (let j = dy - r; j < dy + r; j++) {
     for (let k = dx - r; k < dx + r; k++) {
@@ -110,12 +140,6 @@ function dropAt(dx, dy) {
     }
   }
 }
-function randomDrop() {
-  if (Math.random() > 0.3) {
-    dropAt(Math.random() * params.width, Math.random() * params.height);
-  }
-}
-setInterval(randomDrop, 550);
 
 const clamp = (x, min, max) => Math.max(min, Math.min(max, x));
 function mkRipple() {
@@ -138,8 +162,7 @@ function mkRipple() {
       data = 1024 - data;
       const oldData = lastMap[i];
       lastMap[i] = data;
-      // if (oldData !== data) 
-        {
+      if (oldData !== data) {
         let a =
           ((((x - params.width / 2) * data) / 1024) << 0) + params.width / 2;
         let b =
@@ -161,20 +184,21 @@ function mkRipple() {
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const fps = 60;
 async function loop(i) {
+  const clk = new Date();
   world.step(params, i);
   ctx.putImageData(bgImg, 0, 0);
   world.draw(ctx);
-  // draw the leaf
-  // ctx.fillStyle = darkgreen.toString();
-  // ctx.moveTo(600, 600);
-  // ctx.arc(600, 600, 200, 0, Math.PI * 2);
-  // ctx.fill();
   // draw ripples
+  for (const head of world.heads) {
+    dropAt(...head.fish.pos[0], 7 - head.depth * 7);
+  }
   texture = ctx.getImageData(0, 0, params.width, params.height);
   ripple = ctx.getImageData(0, 0, params.width, params.height);
   mkRipple();
   ctx.putImageData(ripple, 0, 0);
-  await sleep(1000 / fps);
+  world.postDraw(ctx);
+  const diff = new Date() - clk;
+  await sleep(Math.max(0, 1000 / fps - diff));
   requestAnimationFrame(() => loop(i + 1));
 }
 loop(0);

@@ -124,45 +124,55 @@ const { Color, mkWorld } = (() => {
   }
 
   function drawFish(ctx, posList, params) {
-    const { r: rs, c } = params;
+    const rs = params.r;
+    const depth = ((params.dist * Math.PI) / params.every) * 0.2;
+    const c = params.c.opacity(Math.cos(depth) * 0.45 + 0.55);
+    const clear = c.opacity(0);
+
+    // draw two elipses as fins
+    function drawFins(finPos, dx, dy, delta) {
+      const pp = getPos(posList, Math.floor(finPos) - 1, finPos % 1);
+      const p = getPos(posList, Math.floor(finPos), finPos % 1);
+      const d = unit(sub(pp, p));
+      const angle = Math.atan2(d[1], d[0]);
+      const r = getR(rs, Math.floor(finPos), finPos % 1);
+      const n = [-d[1], d[0]];
+      const left = add(p, scale(n, r * dx));
+      const right = add(p, scale(n, -r * dx));
+      const fin = new Path2D();
+      const eAt = (pos, angle) => {
+        fin.moveTo(...pos);
+        fin.ellipse(...pos, r * dx, r * dy, angle, 0, Math.PI * 2);
+      };
+      eAt(left, angle - delta);
+      eAt(right, angle + delta);
+      fin.closePath();
+  
+      const fgrad = ctx.createLinearGradient(
+        ...add(p, scale(d, r)),
+        ...add(p, scale(d, -r * 0.5))
+      );
+      fgrad.addColorStop(0, c.lerp(clear, 0.5).toString());
+      fgrad.addColorStop(1, clear.toString());
+      ctx.fillStyle = fgrad;
+      ctx.fill(fin);
+    }
+    drawFins(3.3, 1.5, 0.6, Math.PI * 0.15); // draw the top two fins
+    drawFins(6.3, 1.3, 0.4, Math.PI * 0.03); // draw the bottom two fins
+
+    // draw the tail
+
+    //draw the fish body
     const fish = fishPath(posList, rs);
     const grad = ctx.createLinearGradient(
       ...posList[0],
       ...posList[posList.length - 1]
     );
     grad.addColorStop(0, c.toString());
-    grad.addColorStop(0.2, c.opacity(0.9).toString());
-    grad.addColorStop(1, c.opacity(0).toString());
+    grad.addColorStop(0.2, c.lerp(clear, 0.1).toString());
+    grad.addColorStop(1, clear.toString());
     ctx.fillStyle = grad;
     ctx.fill(fish);
-
-    // draw two elipses as fins
-    const finPos = 3.3;
-    const pp = getPos(posList, Math.floor(finPos) - 1, finPos % 1);
-    const p = getPos(posList, Math.floor(finPos), finPos % 1);
-    const d = unit(sub(pp, p));
-    const angle = Math.atan2(d[1], d[0]);
-    const r = getR(rs, Math.floor(finPos), finPos % 1);
-    const n = [-d[1], d[0]];
-    const left = add(p, scale(n, r * 1.8));
-    const right = add(p, scale(n, -r * 1.8));
-    const fin = new Path2D();
-    const eAt = (pos, angle) => {
-      fin.moveTo(...pos);
-      fin.ellipse(...pos, r * 1.5, r * 0.7, angle, 0, Math.PI * 2);
-    };
-    eAt(left, angle - Math.PI * 0.2);
-    eAt(right, angle + Math.PI * 0.2);
-    fin.closePath();
-
-    const fgrad = ctx.createLinearGradient(
-      ...add(p, scale(d, r)),
-      ...add(p, scale(d, -r * 0.5))
-    );
-    fgrad.addColorStop(0, c.opacity(0.5).toString());
-    fgrad.addColorStop(1, c.opacity(0).toString());
-    ctx.fillStyle = fgrad;
-    ctx.fill(fin);
   }
 
   function fishFrom({ head, lens, r, c, every, push }) {
@@ -171,7 +181,7 @@ const { Color, mkWorld } = (() => {
     for (let i = 0; i < lens.length; i++)
       pos.push(add(pos[i], rt(lens[i], angle)));
     const vel = pos.map(() => rt(5, -angle));
-    return { pos, vel, lens, r, c, every, dist: 0, push };
+    return { pos, vel, lens, r, c, every, dist: 0.5 * every, push };
   }
 
   function mkWorld(params) {
@@ -208,7 +218,11 @@ const { Color, mkWorld } = (() => {
           fish.vel = bimap(newPos, fish.pos, sub);
           fish.pos = newPos;
           fish.dist += len(fish.vel[0]);
+          const depth = ((fish.dist * Math.PI) / fish.every) * 0.2;
+          if (Math.cos(depth) > 0.995)
+            world.heads.push({ fish, depth: (1 - Math.cos(depth)) / 0.005 });
         }
+        world.heads = [];
         world.fishes.forEach(movePos);
         movePos(world.big);
 
@@ -274,6 +288,14 @@ const { Color, mkWorld } = (() => {
       draw(ctx) {
         drawFish(ctx, world.big.pos, world.big);
         for (const fish of world.fishes) drawFish(ctx, fish.pos, fish);
+      },
+      postDraw(ctx) {
+        for (const head of world.heads) {
+          drawFish(ctx, head.fish.pos, {
+            ...head.fish,
+            r: head.fish.r.map((r) => r * (1 - head.depth) * 0.5),
+          });
+        }
       },
     };
     return world;
