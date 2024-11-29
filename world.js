@@ -131,6 +131,7 @@ const { Color, mkWorld } = (() => {
       ...posList[posList.length - 1]
     );
     grad.addColorStop(0, c.toString());
+    grad.addColorStop(0.2, c.opacity(0.9).toString());
     grad.addColorStop(1, c.opacity(0).toString());
     ctx.fillStyle = grad;
     ctx.fill(fish);
